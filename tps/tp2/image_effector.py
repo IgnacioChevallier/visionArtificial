@@ -1,8 +1,8 @@
 import cv2
 from math import copysign, log10
 
-def create_trackbar(trackbar_name, window_name, slider_max):
-    cv2.createTrackbar(trackbar_name, window_name, 1, slider_max, on_trackbar)
+def create_trackbar(trackbar_name, window_name, slider_max, initial_value=1):
+    cv2.createTrackbar(trackbar_name, window_name, initial_value, slider_max, on_trackbar)
 
 def on_trackbar(val):
     pass
@@ -19,11 +19,16 @@ TRACKBAR_THRESH_SLIDER_MAX = 255
 TRACKBAR_KERNEL_NAME = 'Kernel size'
 TRACKBAR_KERNEL_SLIDER_MAX = 10
 
+TRACKBAR_AREA_NAME = 'Min area'
+TRACKBAR_AREA_SLIDER_MAX = 2000
+TRACKBAR_AREA_DEFAULT = 100
+
 
 def main():
     cv2.namedWindow(WINDOW_NAME)
     create_trackbar(TRACKBAR_THRESH_NAME, WINDOW_NAME, TRACKBAR_THRESH_SLIDER_MAX)
     create_trackbar(TRACKBAR_KERNEL_NAME, WINDOW_NAME, TRACKBAR_KERNEL_SLIDER_MAX)
+    create_trackbar(TRACKBAR_AREA_NAME, WINDOW_NAME, TRACKBAR_AREA_SLIDER_MAX, TRACKBAR_AREA_DEFAULT)
     cap = cv2.VideoCapture(0)
 
     while True:
@@ -55,17 +60,18 @@ def main():
         contours, hierarchy = cv2.findContours(thresh1, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
         # 5. Filtrar contornos que se pueden descartar de antemano
-        filtered_countours = []
-        for cont in contours:
-            if cv2.contourArea(cont) > 100:
-                filtered_countours.append(cont)
-        
-        cv2.drawContours(frame, filtered_countours, 0, (100, 0, 100), 2)
+        min_area = get_trackbar_value(TRACKBAR_AREA_NAME, WINDOW_NAME)
+        filtered_contours = [c for c in contours if cv2.contourArea(c) > min_area]
+
+        cv2.drawContours(frame, filtered_contours, -1, (100, 0, 100), 2)
         cv2.imshow("Contornos patente", frame)
 
         # 6. Compara cada contorno con todos los objetos de referencia, usando matchShapes()
-        hu_moments = get_hu_moments(contours[0])
-        print(hu_moments)
+        saved_hu_moments = []
+        for contour in filtered_contours:
+            hu_moments = get_hu_moments(contour)
+            if compare_hu_moments(hu_moments, saved_hu_moments, 0.1):
+                cv2.show("Patente encontrada", frame)
 
         if cv2.waitKey(1) == ord('q'):
             break
