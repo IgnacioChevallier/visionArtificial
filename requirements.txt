@@ -1,3 +1,5 @@
 numpy
 opencv-contrib-python
 imutils
+mediapipe==0.10.14
+screen_brightness_control
