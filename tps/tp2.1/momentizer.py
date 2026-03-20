@@ -4,12 +4,20 @@ import glob
 import cv2
 from math import copysign, log10
 
+# Ruta base relativa al directorio de este archivo (tps/tp2/)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+HU_MOMENTS_FILE = os.path.join(_SCRIPT_DIR, 'hu_moments', 'hu_moments.txt')
+HU_MOMENTS_IMGS = os.path.join(_SCRIPT_DIR, 'hu_moments', 'imgs')
 
-def save_hu_moments_to_file(hu_moments, filepath='tps/tp2/hu_moments/hu_moments.txt'):
+
+def save_hu_moments_to_file(hu_moments, filepath=None):
     """
     Guarda los momentos de Hu en un archivo.
     Cada línea contiene los 7 valores de los momentos de Hu separados por espacios.
+    Por defecto guarda en tps/tp2/hu_moments/hu_moments.txt
     """
+    if filepath is None:
+        filepath = HU_MOMENTS_FILE
     # Crear el directorio si no existe
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     
@@ -19,11 +27,14 @@ def save_hu_moments_to_file(hu_moments, filepath='tps/tp2/hu_moments/hu_moments.
         f.write(' '.join(map(str, hu_array)) + '\n')
 
 
-def load_hu_moments_from_file(filepath='tps/tp2/hu_moments/hu_moments.txt'):
+def load_hu_moments_from_file(filepath=None):
     """
     Carga los momentos de Hu desde un archivo y los devuelve como una lista de arrays numpy.
     Cada línea del archivo contiene 7 valores separados por espacios.
+    Por defecto carga desde tps/tp2/hu_moments/hu_moments.txt
     """
+    if filepath is None:
+        filepath = HU_MOMENTS_FILE
     saved_hu_moments = []
     if not os.path.exists(filepath):
         return saved_hu_moments
@@ -59,11 +70,16 @@ def get_hu_moments(contour):
     return hu_moments
 
 
-def process_and_save_images(imgs_folder='hu_moments/imgs', output_file='tps/tp2/hu_moments/hu_moments.txt'):
+def process_and_save_images(imgs_folder=None, output_file=None):
     """
     Procesa todas las imágenes en la carpeta especificada, calcula sus momentos de Hu
     y los guarda en el archivo de salida.
+    Por defecto: imgs en tps/tp2/hu_moments/imgs, salida en tps/tp2/hu_moments/hu_moments.txt
     """
+    if imgs_folder is None:
+        imgs_folder = HU_MOMENTS_IMGS
+    if output_file is None:
+        output_file = HU_MOMENTS_FILE
     # Limpiar el archivo de salida si existe
     if os.path.exists(output_file):
         os.remove(output_file)

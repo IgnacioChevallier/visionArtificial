@@ -137,29 +137,13 @@ def main():
 
     cv2.destroyAllWindows()
 
-# def compare_hu_moments(hu_moments, saved_hu_moments, max_diff):
-#     """
-#     Compara los momentos de Hu con los guardados.
-#     Retorna True si encuentra un match dentro del umbral.
-#     """
-#     if not saved_hu_moments:
-#         return False
-#
-#     best_match_score = float('inf')
-#     for i, moments in enumerate(saved_hu_moments):
-#         match_score = cv2.matchShapes(hu_moments, moments, cv2.CONTOURS_MATCH_I2, 0)
-#         print(match_score)
-#         if match_score < best_match_score:
-#             best_match_score = match_score
-#     return best_match_score < max_diff
-
 def compare_hu_moments(hu_moments, saved_hu_moments, max_diff):
     if not saved_hu_moments:
+        print("No hay momentos de Hu guardados")
         return False
 
     best_match_score = float('inf')
     for moments in saved_hu_moments:
-        # Comparar los 7 valores directamente
         diff = np.sum(np.abs(hu_moments.flatten() - moments.flatten()))
         if diff < best_match_score:
             best_match_score = diff
