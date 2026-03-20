@@ -38,7 +38,7 @@ def draw_trackbar_labels(frame):
     thresh_val = get_trackbar_value(TRACKBAR_THRESH_NAME, WINDOW_NAME)
     cv2.putText(frame, f"Threshold: {thresh_val} (umbral binarizacion)", 
                (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    
+
     # Kernel size label
     kernel_val = get_trackbar_value(TRACKBAR_KERNEL_NAME, WINDOW_NAME)
     cv2.putText(frame, f"Kernel: {kernel_val} (tamano morfologia)", 
@@ -60,7 +60,7 @@ def draw_trackbar_labels(frame):
 
 def main():
     cv2.namedWindow(WINDOW_NAME)
-    create_trackbar(TRACKBAR_THRESH_NAME, WINDOW_NAME, TRACKBAR_THRESH_SLIDER_MAX)
+    create_trackbar(TRACKBAR_THRESH_NAME, WINDOW_NAME, TRACKBAR_THRESH_SLIDER_MAX, 100)
     create_trackbar(TRACKBAR_KERNEL_NAME, WINDOW_NAME, TRACKBAR_KERNEL_SLIDER_MAX)
     create_trackbar(TRACKBAR_AREA_NAME, WINDOW_NAME, TRACKBAR_AREA_SLIDER_MAX, TRACKBAR_AREA_DEFAULT)
     create_trackbar(TRACKBAR_MATCH_NAME, WINDOW_NAME, TRACKBAR_MATCH_SLIDER_MAX, TRACKBAR_MATCH_DEFAULT)
@@ -77,7 +77,7 @@ def main():
         # 2. Aplicar un threshold con umbral ajustable con una barra de desplazamiento
         trackbar_thresh_value = get_trackbar_value(TRACKBAR_THRESH_NAME, WINDOW_NAME)
         _, thresh = cv2.threshold(gray, trackbar_thresh_value, 255, cv2.THRESH_BINARY)
-        # cv2.imshow('binary', thresh)
+        cv2.imshow('binary', thresh)
 
         # 3. Aplicar operaciones morfológicas para eliminar ruido de la imagen
         kernel_size_value = get_trackbar_value(TRACKBAR_KERNEL_NAME, WINDOW_NAME)
@@ -92,9 +92,7 @@ def main():
         # cv2.imshow('closing', closing)
 
         # 4. Obtener varios contornos en una misma imagen
-        ret1, thresh1 = cv2.threshold(gray, 80, 255, cv2.THRESH_BINARY)
-
-        contours, hierarchy = cv2.findContours(thresh1, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        contours, hierarchy = cv2.findContours(closing, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
         # 5. Filtrar contornos que se pueden descartar de antemano
         min_area = get_trackbar_value(TRACKBAR_AREA_NAME, WINDOW_NAME)
@@ -110,7 +108,7 @@ def main():
         for contour in filtered_contours:
             hu_moments = get_hu_moments(contour)
             # Usar debug solo si presionas 'd'
-            match_result = compare_hu_moments(hu_moments, saved_hu_moments, match_threshold, debug=debug_mode)
+            match_result = compare_hu_moments(hu_moments, saved_hu_moments, match_threshold)
             if match_result:
                 match_found = True
                 match_count += 1
@@ -139,19 +137,32 @@ def main():
 
     cv2.destroyAllWindows()
 
+# def compare_hu_moments(hu_moments, saved_hu_moments, max_diff):
+#     """
+#     Compara los momentos de Hu con los guardados.
+#     Retorna True si encuentra un match dentro del umbral.
+#     """
+#     if not saved_hu_moments:
+#         return False
+#
+#     best_match_score = float('inf')
+#     for i, moments in enumerate(saved_hu_moments):
+#         match_score = cv2.matchShapes(hu_moments, moments, cv2.CONTOURS_MATCH_I2, 0)
+#         print(match_score)
+#         if match_score < best_match_score:
+#             best_match_score = match_score
+#     return best_match_score < max_diff
+
 def compare_hu_moments(hu_moments, saved_hu_moments, max_diff):
-    """
-    Compara los momentos de Hu con los guardados.
-    Retorna True si encuentra un match dentro del umbral.
-    """
     if not saved_hu_moments:
         return False
-    
+
     best_match_score = float('inf')
-    for i, moments in enumerate(saved_hu_moments):
-        match_score = cv2.matchShapes(hu_moments, moments, cv2.CONTOURS_MATCH_I2, 0)
-        if match_score < best_match_score:
-            best_match_score = match_score
+    for moments in saved_hu_moments:
+        # Comparar los 7 valores directamente
+        diff = np.sum(np.abs(hu_moments.flatten() - moments.flatten()))
+        if diff < best_match_score:
+            best_match_score = diff
 
     return best_match_score < max_diff
 

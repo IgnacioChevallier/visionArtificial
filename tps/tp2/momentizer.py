@@ -59,7 +59,7 @@ def get_hu_moments(contour):
     return hu_moments
 
 
-def process_and_save_images(imgs_folder='tps/tp2/hu_moments/imgs', output_file='tps/tp2/hu_moments/hu_moments.txt'):
+def process_and_save_images(imgs_folder='hu_moments/imgs', output_file='tps/tp2/hu_moments/hu_moments.txt'):
     """
     Procesa todas las imágenes en la carpeta especificada, calcula sus momentos de Hu
     y los guarda en el archivo de salida.
