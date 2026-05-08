@@ -1,9 +1,12 @@
 import os
 import sys
 
-# OpenCV 4.10+ puede probar el backend Orbbec antes que V4L2 y ensuciar la salida.
-# Conviene definir esto antes de importar cv2.
 os.environ.setdefault("OPENCV_VIDEOIO_PRIORITY_OBSENSOR", "0")
+os.environ["QT_LOGGING_RULES"] = (
+    f"{os.environ.get('QT_LOGGING_RULES', '')};*.warning=false"
+    if os.environ.get("QT_LOGGING_RULES")
+    else "*.warning=false"
+)
 
 import cv2
 import numpy as np
@@ -94,8 +97,8 @@ def camera_open_fail_message():
         return f"No se pudo abrir HOMOGRAFIA_VIDEO={path!r}.\n"
     return (
         "No se pudo abrir ninguna camara.\n"
-        "Proba, por ejemplo: HOMOGRAFIA_CAMERA=0 python homografia.py\n"
-        "O con un video: HOMOGRAFIA_VIDEO=/ruta/al/video.mp4 python homografia.py\n"
+        "Proba, por ejemplo: HOMOGRAFIA_CAMERA=0 python3 homografia.py\n"
+        "O con un video: HOMOGRAFIA_VIDEO=/ruta/al/video.mp4 python3 homografia.py\n"
     )
 
 
