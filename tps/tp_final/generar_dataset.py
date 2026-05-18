@@ -22,12 +22,14 @@ ESCALA       = 20     # metros/píxel (resolución nativa S2 para B8/B11/B12)
 N_TILES      = 30     # cantidad de tiles a generar
 
 OUTPUT_DIR   = "dataset"
+PRE_IMG_DIR  = os.path.join(OUTPUT_DIR, "imagenes_pre")
 IMG_DIR      = os.path.join(OUTPUT_DIR, "imagenes")
 MASK_DIR     = os.path.join(OUTPUT_DIR, "mascaras")
 METADATA_CSV = os.path.join(OUTPUT_DIR, "metadata.csv")
 
-os.makedirs(IMG_DIR,  exist_ok=True)
-os.makedirs(MASK_DIR, exist_ok=True)
+os.makedirs(PRE_IMG_DIR, exist_ok=True)
+os.makedirs(IMG_DIR,     exist_ok=True)
+os.makedirs(MASK_DIR,    exist_ok=True)
 
 
 # ── Cloud masking con SCL ─────────────────────────────────────────────────────
@@ -41,21 +43,26 @@ def mask_clouds(img):
     return img.updateMask(mask)
 
 
-# ── Colección base ────────────────────────────────────────────────────────────
-s2 = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-        .filterBounds(ROI)
-        .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
-        .map(mask_clouds))
+# ── Colecciones base ──────────────────────────────────────────────────────────
+s2_base = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+             .filterBounds(ROI)
+             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)))
+
+# Se usa la colección enmascarada para calcular dNBR, pero la colección completa
+# para exportar RGB sin huecos negros en la visualización.
+s2_masked = s2_base.map(mask_clouds)
 
 
 # ── Composiciones PRE y POST ──────────────────────────────────────────────────
-pre  = s2.filterDate(FECHA_PRE_INI,  FECHA_PRE_FIN).median()
-post = s2.filterDate(FECHA_POST_INI, FECHA_POST_FIN).median()
+pre_masked  = s2_masked.filterDate(FECHA_PRE_INI,  FECHA_PRE_FIN).median()
+post_masked = s2_masked.filterDate(FECHA_POST_INI, FECHA_POST_FIN).median()
+pre_full    = s2_base.filterDate(FECHA_PRE_INI,  FECHA_PRE_FIN).median()
+post_full   = s2_base.filterDate(FECHA_POST_INI, FECHA_POST_FIN).median()
 
 
 # ── dNBR y máscara binaria ────────────────────────────────────────────────────
-pre_nbr  = pre.normalizedDifference(['B8', 'B12']).rename('NBR_pre')
-post_nbr = post.normalizedDifference(['B8', 'B12']).rename('NBR_post')
+pre_nbr  = pre_masked.normalizedDifference(['B8', 'B12']).rename('NBR_pre')
+post_nbr = post_masked.normalizedDifference(['B8', 'B12']).rename('NBR_post')
 dnbr     = pre_nbr.subtract(post_nbr).rename('dNBR')
 
 burned_raw = dnbr.gt(DNBR_UMBRAL)
@@ -67,8 +74,9 @@ burned = (burned_raw
             .rename('quemado'))
 
 
-# ── Imagen a exportar (composición POST con bandas seleccionadas) ──────────────
-imagen_post = post.select(BANDAS_IMG)
+# ── Imágenes a exportar (composiciones PRE y POST con bandas seleccionadas) ───
+imagen_pre  = pre_full.select(BANDAS_IMG)
+imagen_post = post_full.select(BANDAS_IMG)
 
 
 # ── Grilla de tiles sobre el ROI ──────────────────────────────────────────────
@@ -105,12 +113,22 @@ with open(METADATA_CSV, "w", newline="") as csvfile:
 
     for idx, tile_geom in enumerate(tiles_a_procesar):
         nombre    = f"tile_{idx:03d}"
-        ruta_img  = os.path.join(IMG_DIR,  f"{nombre}.tif")
-        ruta_mask = os.path.join(MASK_DIR, f"{nombre}.tif")
+        ruta_pre  = os.path.join(PRE_IMG_DIR, f"{nombre}.tif")
+        ruta_img  = os.path.join(IMG_DIR,     f"{nombre}.tif")
+        ruta_mask = os.path.join(MASK_DIR,    f"{nombre}.tif")
 
         print(f"[{idx+1:02d}/{N_TILES}] Descargando {nombre}...")
 
         try:
+            # Imagen PRE multibanda
+            geemap.download_ee_image(
+                image=imagen_pre.clip(tile_geom),
+                filename=ruta_pre,
+                region=tile_geom,
+                scale=ESCALA,
+                crs="EPSG:4326"
+            )
+
             # Imagen POST multibanda
             geemap.download_ee_image(
                 image=imagen_post.clip(tile_geom),

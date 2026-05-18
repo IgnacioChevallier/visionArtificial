@@ -6,15 +6,17 @@ import matplotlib.patches as mpatches
 from pathlib import Path
 
 # ── Configuración ─────────────────────────────────────────────────────────────
-DATASET_DIR = Path("dataset")
-IMG_DIR     = DATASET_DIR / "imagenes"
-MASK_DIR    = DATASET_DIR / "mascaras"
+DATASET_DIR  = Path("dataset")
+PRE_IMG_DIR  = DATASET_DIR / "imagenes_pre"
+POST_IMG_DIR = DATASET_DIR / "imagenes"
+MASK_DIR     = DATASET_DIR / "mascaras"
 
 # Índices de bandas dentro del .tif (0-based)
 # Orden guardado: B2, B3, B4, B8, B11, B12
 BANDA_R = 2  # B4 - Red
 BANDA_G = 1  # B3 - Green
 BANDA_B = 0  # B2 - Blue
+GAMMA = 0.8  # Menor que 1 aclara la imagen para visualización
 
 
 def cargar_rgb(path_tif):
@@ -26,7 +28,7 @@ def cargar_rgb(path_tif):
     rgb = np.stack([r, g, b], axis=-1)
     p2, p98 = np.percentile(rgb[rgb > 0], (2, 98))
     rgb = np.clip((rgb - p2) / (p98 - p2), 0, 1)
-    return rgb
+    return np.power(rgb, GAMMA)
 
 
 def cargar_mascara(path_tif):
@@ -35,17 +37,19 @@ def cargar_mascara(path_tif):
 
 
 def dibujar(fig, axes, nombre_tile):
-    path_img  = IMG_DIR  / f"{nombre_tile}.tif"
-    path_mask = MASK_DIR / f"{nombre_tile}.tif"
+    path_pre  = PRE_IMG_DIR  / f"{nombre_tile}.tif"
+    path_post = POST_IMG_DIR / f"{nombre_tile}.tif"
+    path_mask = MASK_DIR     / f"{nombre_tile}.tif"
 
-    if not path_img.exists() or not path_mask.exists():
+    if not path_pre.exists() or not path_post.exists() or not path_mask.exists():
         print(f"Advertencia: archivos no encontrados para {nombre_tile}")
         return
 
-    rgb     = cargar_rgb(path_img)
-    mascara = cargar_mascara(path_mask)
+    rgb_pre  = cargar_rgb(path_pre)
+    rgb_post = cargar_rgb(path_post)
+    mascara  = cargar_mascara(path_mask)
 
-    overlay = rgb.copy()
+    overlay = rgb_post.copy()
     quemado = mascara == 1
     overlay[quemado, 0] = 1.0
     overlay[quemado, 1] *= 0.3
@@ -58,20 +62,24 @@ def dibujar(fig, axes, nombre_tile):
 
     fig.suptitle(f"Tile: {nombre_tile}  |  Área quemada: {pct}%", fontsize=13)
 
-    axes[0].imshow(rgb)
-    axes[0].set_title("RGB (color verdadero)")
+    axes[0].imshow(rgb_pre)
+    axes[0].set_title("Antes del incendio")
     axes[0].axis("off")
 
-    axes[1].imshow(mascara, cmap="RdYlGn_r", vmin=0, vmax=1)
-    axes[1].set_title("Máscara binaria")
+    axes[1].imshow(rgb_post)
+    axes[1].set_title("Después del incendio")
     axes[1].axis("off")
-    parche_q  = mpatches.Patch(color="red",   label="Quemado (1)")
-    parche_nq = mpatches.Patch(color="green", label="No quemado (0)")
-    axes[1].legend(handles=[parche_q, parche_nq], loc="lower right", fontsize=8)
 
-    axes[2].imshow(overlay)
-    axes[2].set_title("Superposición")
+    axes[2].imshow(mascara, cmap="gray_r", vmin=0, vmax=1)
+    axes[2].set_title("Máscara binaria")
     axes[2].axis("off")
+    parche_q  = mpatches.Patch(color="black", label="Quemado (1)")
+    parche_nq = mpatches.Patch(color="white", label="No quemado (0)")
+    axes[2].legend(handles=[parche_q, parche_nq], loc="lower right", fontsize=8)
+
+    axes[3].imshow(overlay)
+    axes[3].set_title("Superposición")
+    axes[3].axis("off")
 
     fig.canvas.draw_idle()
 
@@ -79,7 +87,7 @@ def dibujar(fig, axes, nombre_tile):
 def explorar(tiles, indice_inicial):
     state = {"idx": indice_inicial}
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
     fig.text(0.5, 0.01, "← → para navegar  |  's' para guardar  |  'q' para salir",
              ha="center", fontsize=9, color="gray")
     plt.tight_layout(rect=[0, 0.04, 1, 1])
@@ -111,7 +119,7 @@ def explorar(tiles, indice_inicial):
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    tiles = sorted(IMG_DIR.glob("*.tif"))
+    tiles = sorted(POST_IMG_DIR.glob("*.tif"))
     if not tiles:
         print("No se encontraron tiles en dataset/imagenes/")
         sys.exit(1)
