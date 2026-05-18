@@ -51,10 +51,9 @@ def dibujar(fig, axes, nombre_tile):
 
     overlay = rgb_post.copy()
     quemado = mascara == 1
-    blanco_mascara = mascara == 0
-    overlay[blanco_mascara, 0] = 1.0
-    overlay[blanco_mascara, 1] *= 0.3
-    overlay[blanco_mascara, 2] *= 0.3
+    overlay[quemado, 0] = 1.0
+    overlay[quemado, 1] *= 0.3
+    overlay[quemado, 2] *= 0.3
 
     pct = round(quemado.sum() / mascara.size * 100, 1)
 

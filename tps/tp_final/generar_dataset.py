@@ -16,9 +16,15 @@ FECHA_POST_INI = "2026-02-01"
 FECHA_POST_FIN = "2026-03-08"   # cicatriz formada, fuego contenido el 18 feb
 
 BANDAS_IMG   = ['B2', 'B3', 'B4', 'B8', 'B11', 'B12']  # bandas a guardar en el tile
-DNBR_UMBRAL  = 0.25   # threshold de quemado
-MIN_PIXELES  = 250    # componentes conexas menores a esto se eliminan
-ESCALA       = 20     # metros/píxel (resolución nativa S2 para B8/B11/B12)
+DNBR_UMBRAL       = 0.30  # menor = mascara mas generosa
+PRE_NBR_MIN      = 0.15  # vegetacion minima antes del incendio
+POST_NBR_MAX     = 0.30  # NBR maximo despues; mayor = mascara mas generosa
+NDSI_NIEVE_MAX   = 0.35  # valores mayores suelen ser nieve/hielo
+BRILLO_MAX       = 3500  # excluye pixeles muy blancos en bandas visibles
+CROMA_MIN        = 500   # excluye blancos/grises con poca diferencia RGB
+MIN_PIXELES      = 120   # componentes conexas menores a esto se eliminan
+DILATACION_PX    = 1     # expande levemente la cicatriz detectada
+ESCALA           = 20    # metros/píxel (resolución nativa S2 para B8/B11/B12)
 N_TILES      = 30     # cantidad de tiles a generar
 
 OUTPUT_DIR   = "dataset"
@@ -80,16 +86,34 @@ pre_nbr  = pre_masked.normalizedDifference(['B8', 'B12']).rename('NBR_pre')
 post_nbr = post_masked.normalizedDifference(['B8', 'B12']).rename('NBR_post')
 dnbr     = pre_nbr.subtract(post_nbr).rename('dNBR')
 
-burned_raw = (
-    dnbr.gt(DNBR_UMBRAL)
-        .And(pre_nbr.gt(0.25))
-        .And(post_nbr.lt(0.15))
+post_vis = post_full.select(['B2', 'B3', 'B4'])
+post_brightness = post_vis.reduce(ee.Reducer.mean())
+post_chroma = (post_vis.reduce(ee.Reducer.max())
+                     .subtract(post_vis.reduce(ee.Reducer.min())))
+post_ndsi = post_full.normalizedDifference(['B3', 'B11']).rename('NDSI_post')
+
+nieve_o_gris_claro = (
+    post_ndsi.gt(NDSI_NIEVE_MAX)
+        .Or(post_brightness.gt(BRILLO_MAX).And(post_chroma.lt(CROMA_MIN)))
 )
 
-# Eliminar falsos positivos pequeños (manchas < MIN_PIXELES píxeles contiguos)
-burned = (burned_raw
-            .connectedPixelCount(MIN_PIXELES + 1, True)
-            .gte(MIN_PIXELES)
+burned_raw = (
+    dnbr.gt(DNBR_UMBRAL)
+        .And(pre_nbr.gt(PRE_NBR_MIN))
+        .And(post_nbr.lt(POST_NBR_MAX))
+        .And(nieve_o_gris_claro.Not())
+)
+
+# Eliminar falsos positivos pequeños y unir un poco la cicatriz detectada.
+# Importante: connectedPixelCount debe correr solo sobre candidatos quemados.
+# Si se aplica sobre 0/1 sin enmascarar, tambien conserva regiones enormes de no quemado.
+burned_candidates = burned_raw.updateMask(burned_raw)
+burned_clean = (burned_candidates
+                  .connectedPixelCount(MIN_PIXELES + 1, True)
+                  .gte(MIN_PIXELES)
+                  .unmask(0))
+burned = (burned_clean
+            .focal_max(radius=DILATACION_PX, units='pixels')
             .rename('quemado'))
 
 
