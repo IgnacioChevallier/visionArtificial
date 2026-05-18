@@ -8,16 +8,16 @@ import numpy as np
 ee.Initialize()
 
 # ── Configuración ─────────────────────────────────────────────────────────────
-ROI = ee.Geometry.Rectangle([-72.0, -42.8, -71.2, -42.0])  # Parque Nacional Los Alerces
+ROI = ee.Geometry.Rectangle([-71.788, -42.525, -71.371, -42.695])
 
 FECHA_PRE_INI  = "2025-11-01"
 FECHA_PRE_FIN  = "2025-12-08"   # un día antes del inicio del incendio "Puerto Café"
-FECHA_POST_INI = "2026-02-05"
-FECHA_POST_FIN = "2026-02-20"   # cicatriz formada, fuego contenido el 18 feb
+FECHA_POST_INI = "2026-02-01"
+FECHA_POST_FIN = "2026-03-08"   # cicatriz formada, fuego contenido el 18 feb
 
 BANDAS_IMG   = ['B2', 'B3', 'B4', 'B8', 'B11', 'B12']  # bandas a guardar en el tile
 DNBR_UMBRAL  = 0.25   # threshold de quemado
-MIN_PIXELES  = 100    # componentes conexas menores a esto se eliminan
+MIN_PIXELES  = 250    # componentes conexas menores a esto se eliminan
 ESCALA       = 20     # metros/píxel (resolución nativa S2 para B8/B11/B12)
 N_TILES      = 30     # cantidad de tiles a generar
 
@@ -48,16 +48,31 @@ s2_base = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
              .filterBounds(ROI)
              .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)))
 
+pre_collection  = s2_base.filterDate(FECHA_PRE_INI,  FECHA_PRE_FIN)
+post_collection = s2_base.filterDate(FECHA_POST_INI, FECHA_POST_FIN)
+
+pre_count = pre_collection.size().getInfo()
+post_count = post_collection.size().getInfo()
+print(f"Imagenes Sentinel-2 PRE encontradas: {pre_count}")
+print(f"Imagenes Sentinel-2 POST encontradas: {post_count}")
+
+if pre_count == 0 or post_count == 0:
+    raise RuntimeError(
+        "No hay imagenes Sentinel-2 para una de las ventanas con los filtros actuales. "
+        "Ampliar FECHA_PRE/POST o relajar CLOUDY_PIXEL_PERCENTAGE."
+    )
+
 # Se usa la colección enmascarada para calcular dNBR, pero la colección completa
 # para exportar RGB sin huecos negros en la visualización.
-s2_masked = s2_base.map(mask_clouds)
+pre_masked_collection = pre_collection.map(mask_clouds)
+post_masked_collection = post_collection.map(mask_clouds)
 
 
 # ── Composiciones PRE y POST ──────────────────────────────────────────────────
-pre_masked  = s2_masked.filterDate(FECHA_PRE_INI,  FECHA_PRE_FIN).median()
-post_masked = s2_masked.filterDate(FECHA_POST_INI, FECHA_POST_FIN).median()
-pre_full    = s2_base.filterDate(FECHA_PRE_INI,  FECHA_PRE_FIN).median()
-post_full   = s2_base.filterDate(FECHA_POST_INI, FECHA_POST_FIN).median()
+pre_masked  = pre_masked_collection.median()
+post_masked = post_masked_collection.median()
+pre_full    = pre_collection.median()
+post_full   = post_collection.median()
 
 
 # ── dNBR y máscara binaria ────────────────────────────────────────────────────
@@ -65,7 +80,11 @@ pre_nbr  = pre_masked.normalizedDifference(['B8', 'B12']).rename('NBR_pre')
 post_nbr = post_masked.normalizedDifference(['B8', 'B12']).rename('NBR_post')
 dnbr     = pre_nbr.subtract(post_nbr).rename('dNBR')
 
-burned_raw = dnbr.gt(DNBR_UMBRAL)
+burned_raw = (
+    dnbr.gt(DNBR_UMBRAL)
+        .And(pre_nbr.gt(0.25))
+        .And(post_nbr.lt(0.15))
+)
 
 # Eliminar falsos positivos pequeños (manchas < MIN_PIXELES píxeles contiguos)
 burned = (burned_raw
