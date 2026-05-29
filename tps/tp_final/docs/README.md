@@ -129,6 +129,7 @@ Autenticar Earth Engine una vez:
 
 ```bash
 earthengine authenticate
+earthengine authenticate --auth_mode=notebook --force
 ```
 
 Generar el dataset:

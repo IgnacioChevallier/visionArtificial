@@ -6,10 +6,15 @@ import matplotlib.patches as mpatches
 from pathlib import Path
 
 # ── Configuración ─────────────────────────────────────────────────────────────
-DATASET_DIR  = Path("dataset")
+BASE_DIR     = Path(__file__).resolve().parent
+DATASET_DIR  = BASE_DIR / "dataset"
 PRE_IMG_DIR  = DATASET_DIR / "imagenes_pre"
 POST_IMG_DIR = DATASET_DIR / "imagenes"
 MASK_DIR     = DATASET_DIR / "mascaras"
+SAVED_DIR    = BASE_DIR / "saved"
+
+if "s" in plt.rcParams["keymap.save"]:
+    plt.rcParams["keymap.save"].remove("s")
 
 # Índices de bandas dentro del .tif (0-based)
 # Orden guardado: B2, B3, B4, B8, B11, B12
@@ -84,6 +89,17 @@ def dibujar(fig, axes, nombre_tile):
     fig.canvas.draw_idle()
 
 
+def crear_ruta_guardado(nombre_tile):
+    SAVED_DIR.mkdir(exist_ok=True)
+    contador = 1
+
+    while True:
+        salida = SAVED_DIR / f"{nombre_tile}_visualizacion_{contador:02d}.png"
+        if not salida.exists():
+            return salida
+        contador += 1
+
+
 def explorar(tiles, indice_inicial):
     state = {"idx": indice_inicial}
 
@@ -101,7 +117,7 @@ def explorar(tiles, indice_inicial):
             state["idx"] = (state["idx"] - 1) % len(tiles)
         elif event.key == "s":
             nombre = tiles[state["idx"]].stem
-            salida = f"{nombre}_visualizacion.png"
+            salida = crear_ruta_guardado(nombre)
             fig.savefig(salida, dpi=150, bbox_inches="tight")
             print(f"Guardado: {salida}")
             return

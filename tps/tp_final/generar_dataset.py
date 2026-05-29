@@ -16,13 +16,13 @@ FECHA_POST_INI = "2026-02-01"
 FECHA_POST_FIN = "2026-03-08"   # cicatriz formada, fuego contenido el 18 feb
 
 BANDAS_IMG   = ['B2', 'B3', 'B4', 'B8', 'B11', 'B12']  # bandas a guardar en el tile
-DNBR_UMBRAL       = 0.30  # menor = mascara mas generosa
-PRE_NBR_MIN      = 0.15  # vegetacion minima antes del incendio
-POST_NBR_MAX     = 0.30  # NBR maximo despues; mayor = mascara mas generosa
+DNBR_UMBRAL       = 0.22  # menor = mascara mas generosa
+PRE_NBR_MIN      = 0.10  # vegetacion minima antes del incendio
+POST_NBR_MAX     = 0.40  # NBR maximo despues; mayor = mascara mas generosa
 NDSI_NIEVE_MAX   = 0.35  # valores mayores suelen ser nieve/hielo
 BRILLO_MAX       = 3500  # excluye pixeles muy blancos en bandas visibles
 CROMA_MIN        = 500   # excluye blancos/grises con poca diferencia RGB
-MIN_PIXELES      = 120   # componentes conexas menores a esto se eliminan
+MIN_PIXELES      = 60    # componentes conexas menores a esto se eliminan
 DILATACION_PX    = 1     # expande levemente la cicatriz detectada
 ESCALA           = 20    # metros/píxel (resolución nativa S2 para B8/B11/B12)
 N_TILES      = 30     # cantidad de tiles a generar
