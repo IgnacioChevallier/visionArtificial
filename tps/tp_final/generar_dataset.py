@@ -8,7 +8,7 @@ import numpy as np
 ee.Initialize()
 
 # ── Configuración ─────────────────────────────────────────────────────────────
-ROI = ee.Geometry.Rectangle([-71.788, -42.525, -71.371, -42.695])
+ROI = ee.Geometry.Rectangle([-71.917, -42.821, -71.359, -42.500])
 
 FECHA_PRE_INI  = "2025-11-01"
 FECHA_PRE_FIN  = "2025-12-08"   # un día antes del inicio del incendio "Puerto Café"

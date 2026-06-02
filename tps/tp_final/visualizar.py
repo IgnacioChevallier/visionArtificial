@@ -1,4 +1,5 @@
 import sys
+import csv
 import numpy as np
 import rasterio
 import matplotlib.pyplot as plt
@@ -6,12 +7,31 @@ import matplotlib.patches as mpatches
 from pathlib import Path
 
 # ── Configuración ─────────────────────────────────────────────────────────────
-BASE_DIR     = Path(__file__).resolve().parent
-DATASET_DIR  = BASE_DIR / "dataset"
+BASE_DIR = Path(__file__).resolve().parent
+
+# Seleccionar dataset: python visualizar.py [--temporal] [tile_XXX]
+_args = sys.argv[1:]
+TEMPORAL = "--temporal" in _args
+if TEMPORAL:
+    _args.remove("--temporal")
+    DATASET_DIR = BASE_DIR / "dataset_temporal"
+else:
+    DATASET_DIR = BASE_DIR / "dataset"
+
 PRE_IMG_DIR  = DATASET_DIR / "imagenes_pre"
 POST_IMG_DIR = DATASET_DIR / "imagenes"
 MASK_DIR     = DATASET_DIR / "mascaras"
 SAVED_DIR    = BASE_DIR / "saved"
+sys.argv = [sys.argv[0]] + _args
+
+# Cargar metadata temporal si corresponde
+_meta_temporal = {}
+if TEMPORAL:
+    _csv = DATASET_DIR / "metadata_temporal.csv"
+    if _csv.exists():
+        with open(_csv) as f:
+            for row in csv.DictReader(f):
+                _meta_temporal[row["tile"]] = row
 
 if "s" in plt.rcParams["keymap.save"]:
     plt.rcParams["keymap.save"].remove("s")
@@ -65,14 +85,33 @@ def dibujar(fig, axes, nombre_tile):
     for ax in axes:
         ax.cla()
 
-    fig.suptitle(f"Tile: {nombre_tile}  |  Área quemada: {pct}%", fontsize=13)
+    # Título principal
+    titulo = f"Tile: {nombre_tile}  |  Área quemada: {pct}%"
+    fig.suptitle(titulo, fontsize=13)
+
+    # Subtítulos con info temporal (solo en modo --temporal)
+    meta = _meta_temporal.get(nombre_tile, {})
+    if meta:
+        fire    = meta.get("fire_arrival_utc", "")[:16].replace("T", " ")
+        prec    = meta.get("timing_precision", "")
+        pre_d   = meta.get("fecha_pre_img", "—")
+        post_d  = meta.get("fecha_post_img", "—")
+        lag_pre = meta.get("lag_pre_h",  "?")
+        lag_post= meta.get("lag_post_h", "?")
+        pre_title  = f"Antes del incendio\n{pre_d}  (−{lag_pre} h al fuego)"
+        post_title = f"Después del incendio\n{post_d}  (+{lag_post} h del fuego)"
+        fire_info  = f"Fuego: {fire} UTC  [{prec}]"
+    else:
+        pre_title  = "Antes del incendio"
+        post_title = "Después del incendio"
+        fire_info  = None
 
     axes[0].imshow(rgb_pre)
-    axes[0].set_title("Antes del incendio")
+    axes[0].set_title(pre_title, fontsize=9)
     axes[0].axis("off")
 
     axes[1].imshow(rgb_post)
-    axes[1].set_title("Después del incendio")
+    axes[1].set_title(post_title, fontsize=9)
     axes[1].axis("off")
 
     axes[2].imshow(mascara, cmap="gray_r", vmin=0, vmax=1)
@@ -85,6 +124,12 @@ def dibujar(fig, axes, nombre_tile):
     axes[3].imshow(overlay)
     axes[3].set_title("Superposición")
     axes[3].axis("off")
+
+    # Banda informativa de timing debajo del panel de superposición
+    if fire_info:
+        axes[3].text(0.5, -0.04, fire_info, transform=axes[3].transAxes,
+                     ha="center", va="top", fontsize=8, color="#555555",
+                     style="italic")
 
     fig.canvas.draw_idle()
 
