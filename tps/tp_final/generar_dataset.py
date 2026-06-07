@@ -21,13 +21,14 @@ FECHA_POST_INI = "2026-02-01"
 FECHA_POST_FIN = "2026-03-08"   # cicatriz formada, fuego contenido el 18 feb
 
 BANDAS_IMG   = ['B2', 'B3', 'B4', 'B8', 'B11', 'B12']  # bandas a guardar en el tile
-DNBR_UMBRAL       = 0.27  # menor = mascara mas generosa
+DNBR_UMBRAL       = 0.30  # menor = mascara mas generosa
 PRE_NBR_MIN      = 0.15  # vegetacion minima antes del incendio
 POST_NBR_MAX     = 0.40  # NBR maximo despues; mayor = mascara mas generosa
 NDSI_NIEVE_MAX   = 0.25  # valores mayores suelen ser nieve/hielo
 BRILLO_MAX       = 3500  # excluye pixeles muy blancos en bandas visibles
 CROMA_MIN        = 500   # excluye blancos/grises con poca diferencia RGB
-MIN_PIXELES      = 120   # componentes conexas menores a esto se eliminan
+NDWI_AGUA_MAX    = 0.05  # pixeles con NDWI pre > este valor se consideran agua
+MIN_PIXELES      = 150   # componentes conexas menores a esto se eliminan
 DILATACION_PX    = 1     # expande levemente la cicatriz detectada
 ESCALA           = 20    # metros/píxel (resolución nativa S2 para B8/B11/B12)
 N_TILES      = 30     # cantidad de tiles a generar
@@ -96,17 +97,20 @@ post_brightness = post_vis.reduce(ee.Reducer.mean())
 post_chroma = (post_vis.reduce(ee.Reducer.max())
                      .subtract(post_vis.reduce(ee.Reducer.min())))
 post_ndsi = post_full.normalizedDifference(['B3', 'B11']).rename('NDSI_post')
+pre_ndwi  = pre_full.normalizedDifference(['B3', 'B8']).rename('NDWI_pre')
 
 nieve_o_gris_claro = (
     post_ndsi.gt(NDSI_NIEVE_MAX)
         .Or(post_brightness.gt(BRILLO_MAX).And(post_chroma.lt(CROMA_MIN)))
 )
+agua_pre = pre_ndwi.gt(NDWI_AGUA_MAX)
 
 burned_raw = (
     dnbr.gt(DNBR_UMBRAL)
         .And(pre_nbr.gt(PRE_NBR_MIN))
         .And(post_nbr.lt(POST_NBR_MAX))
         .And(nieve_o_gris_claro.Not())
+        .And(agua_pre.Not())
 )
 
 # Eliminar falsos positivos pequeños y unir un poco la cicatriz detectada.
@@ -152,20 +156,25 @@ tiles_a_procesar = tiles
 
 
 # ── Descarga ──────────────────────────────────────────────────────────────────
-with open(METADATA_CSV, "w", newline="") as csvfile:
+csv_exists = os.path.isfile(METADATA_CSV)
+existing_tiles = len([f for f in os.listdir(MASK_DIR) if f.endswith(".tif")])
+print(f"Tiles existentes en el dataset: {existing_tiles} — próximo índice: {existing_tiles}")
+
+with open(METADATA_CSV, "a", newline="") as csvfile:
     writer = csv.writer(csvfile)
-    writer.writerow([
-        "tile", "lon_min", "lat_min", "lon_max", "lat_max",
-        "pct_quemado", "fecha_pre", "fecha_post", "escala_m"
-    ])
+    if not csv_exists:
+        writer.writerow([
+            "tile", "lon_min", "lat_min", "lon_max", "lat_max",
+            "pct_quemado", "fecha_pre", "fecha_post", "escala_m"
+        ])
 
     for idx, tile_geom in enumerate(tiles_a_procesar):
-        nombre    = f"tile_{idx:03d}"
+        nombre    = f"tile_{existing_tiles + idx:03d}"
         ruta_pre  = os.path.join(PRE_IMG_DIR, f"{nombre}.tif")
         ruta_img  = os.path.join(IMG_DIR,     f"{nombre}.tif")
         ruta_mask = os.path.join(MASK_DIR,    f"{nombre}.tif")
 
-        print(f"[{idx+1:02d}/{N_TILES}] Descargando {nombre}...")
+        print(f"[{idx+1:02d}/{len(tiles_a_procesar)}] Descargando {nombre}...")
 
         try:
             # Imagen PRE multibanda
