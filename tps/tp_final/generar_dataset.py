@@ -8,7 +8,12 @@ import numpy as np
 ee.Initialize()
 
 # ── Configuración ─────────────────────────────────────────────────────────────
-ROI = ee.Geometry.Rectangle([-71.788, -42.525, -71.371, -42.695])
+ROI = ee.Geometry.Rectangle([
+    -71.927,  # west
+    -42.818,  # south
+    -71.296,  # east
+    -42.457   # north
+])
 
 FECHA_PRE_INI  = "2025-11-01"
 FECHA_PRE_FIN  = "2025-12-08"   # un día antes del inicio del incendio "Puerto Café"
@@ -16,13 +21,13 @@ FECHA_POST_INI = "2026-02-01"
 FECHA_POST_FIN = "2026-03-08"   # cicatriz formada, fuego contenido el 18 feb
 
 BANDAS_IMG   = ['B2', 'B3', 'B4', 'B8', 'B11', 'B12']  # bandas a guardar en el tile
-DNBR_UMBRAL       = 0.22  # menor = mascara mas generosa
-PRE_NBR_MIN      = 0.10  # vegetacion minima antes del incendio
+DNBR_UMBRAL       = 0.27  # menor = mascara mas generosa
+PRE_NBR_MIN      = 0.15  # vegetacion minima antes del incendio
 POST_NBR_MAX     = 0.40  # NBR maximo despues; mayor = mascara mas generosa
-NDSI_NIEVE_MAX   = 0.35  # valores mayores suelen ser nieve/hielo
+NDSI_NIEVE_MAX   = 0.25  # valores mayores suelen ser nieve/hielo
 BRILLO_MAX       = 3500  # excluye pixeles muy blancos en bandas visibles
 CROMA_MIN        = 500   # excluye blancos/grises con poca diferencia RGB
-MIN_PIXELES      = 60    # componentes conexas menores a esto se eliminan
+MIN_PIXELES      = 120   # componentes conexas menores a esto se eliminan
 DILATACION_PX    = 1     # expande levemente la cicatriz detectada
 ESCALA           = 20    # metros/píxel (resolución nativa S2 para B8/B11/B12)
 N_TILES      = 30     # cantidad de tiles a generar
@@ -143,7 +148,7 @@ tiles = [
 ]
 
 print(f"Tiles disponibles en el ROI: {len(tiles)}")
-tiles_a_procesar = tiles[:N_TILES]
+tiles_a_procesar = tiles
 
 
 # ── Descarga ──────────────────────────────────────────────────────────────────
