@@ -89,12 +89,11 @@ def dibujar(fig, axes, nombre_tile):
     fig.canvas.draw_idle()
 
 
-def crear_ruta_guardado(nombre_tile):
+def crear_ruta_guardado(nombre_tile, sufijo="visualizacion"):
     SAVED_DIR.mkdir(exist_ok=True)
     contador = 1
-
     while True:
-        salida = SAVED_DIR / f"{nombre_tile}_visualizacion_{contador:02d}.png"
+        salida = SAVED_DIR / f"{nombre_tile}_{sufijo}_{contador:02d}.png"
         if not salida.exists():
             return salida
         contador += 1
@@ -104,7 +103,7 @@ def explorar(tiles, indice_inicial):
     state = {"idx": indice_inicial}
 
     fig, axes = plt.subplots(1, 4, figsize=(20, 5))
-    fig.text(0.5, 0.01, "← → para navegar  |  's' para guardar  |  'q' para salir",
+    fig.text(0.5, 0.01, "← → para navegar  |  's' para guardar  |  't' para guardar con fondo transparente  |  'q' para salir",
              ha="center", fontsize=9, color="gray")
     plt.tight_layout(rect=[0, 0.04, 1, 1])
 
@@ -120,6 +119,12 @@ def explorar(tiles, indice_inicial):
             salida = crear_ruta_guardado(nombre)
             fig.savefig(salida, dpi=150, bbox_inches="tight")
             print(f"Guardado: {salida}")
+            return
+        elif event.key == "t":
+            nombre = tiles[state["idx"]].stem
+            salida = crear_ruta_guardado(nombre, sufijo="transparente")
+            fig.savefig(salida, dpi=150, bbox_inches="tight", transparent=True)
+            print(f"Guardado (transparente): {salida}")
             return
         elif event.key == "q":
             plt.close(fig)

@@ -30,11 +30,13 @@ OUT_DIR     = Path("remask_comparisons")
 OUT_DIR.mkdir(exist_ok=True)
 
 # Known false-positive tiles
-FP_TILES  = ["tile_018", "tile_026"]
+FP_TILES  = ["tile_003", "tile_006", "tile_007", "tile_014",  # mountain / snow
+             "tile_052", "tile_053", "tile_061", "tile_062"]  # dried lakes / rivers / grass
 # Cloud/snow affected — local NBR unreliable, shown for reference only
 CLOUD_TILES = []
 # Tiles with real burns — must not lose too much detection
-REF_TILES = ["tile_001", "tile_004", "tile_008", "tile_009"]
+REF_TILES = ["tile_001", "tile_004", "tile_008", "tile_009",  # confirmed burns
+             "tile_016", "tile_017"]                           # steppe burns currently under-detected
 
 IDX = {"B2": 0, "B3": 1, "B4": 2, "B8": 3, "B11": 4, "B12": 5}
 
@@ -47,11 +49,26 @@ CROMA_MIN     = 500
 NDWI_AGUA_MAX = 0.05   # pre-fire pixels with NDWI above this are water, excluded
 
 # Candidate parameter sets to evaluate
-# Format: (DNBR_UMBRAL, PRE_NBR_MIN, POST_NBR_MAX)
-# MIN_PIXELES and NDSI_MAX are taken from the fixed params above
+# Format: (DNBR_UMBRAL, PRE_NBR_MIN, POST_NBR_MAX, NDSI_MAX, NDWI_MAX, MIN_PIXELES)
+#
+# Tensions to resolve:
+#   FN 016/017 (steppe under-detected): lower DNBR_UMBRAL, lower PRE_NBR_MIN, higher POST_NBR_MAX
+#   FP 052/053/061 (dried lakes/rivers): higher NDWI_MAX (excludes moist lake margins in PRE)
+#   FP 003/006/007/014 (mountain/snow):  higher PRE_NBR_MIN, lower NDSI_MAX, higher MIN_PIXELES
+#   → PRE_NBR_MIN is the shared knob; compensate with MIN_PIXELES for mountain blobs
 CANDIDATES = [
-    (0.22, 0.10, 0.40),  # original GEE baseline
-    (0.30, 0.15, 0.40),  # current final params (generar_dataset.py)
+    (0.30, 0.15, 0.40, 0.25, 0.05, 150),  # current baseline
+    # --- fix steppe FN: relax POST_NBR_MAX + lower dNBR ---
+    (0.27, 0.15, 0.45, 0.25, 0.05, 150),
+    (0.27, 0.10, 0.45, 0.25, 0.05, 200),
+    # --- fix water FP: raise NDWI_MAX to exclude lake/river margins ---
+    (0.30, 0.15, 0.40, 0.25, 0.12, 150),
+    (0.27, 0.15, 0.45, 0.25, 0.12, 150),
+    # --- fix mountain FP: higher PRE_NBR_MIN + tighter snow ---
+    (0.27, 0.20, 0.45, 0.18, 0.12, 200),
+    # --- combined best guess ---
+    (0.27, 0.15, 0.45, 0.18, 0.12, 200),
+    (0.25, 0.10, 0.50, 0.18, 0.12, 250),
 ]
 
 
@@ -66,7 +83,7 @@ def norm_diff(a, b):
 
 
 def compute_mask(pre, post, dnbr_umbral, pre_nbr_min, post_nbr_max,
-                 ndsi_max=NDSI_MAX, min_px=MIN_PIXELES):
+                 ndsi_max=NDSI_MAX, ndwi_agua_max=NDWI_AGUA_MAX, min_px=MIN_PIXELES):
     pre_B3,  pre_B8,  pre_B12  = pre[IDX["B3"]],  pre[IDX["B8"]],  pre[IDX["B12"]]
     post_B8, post_B12 = post[IDX["B8"]], post[IDX["B12"]]
     post_B2, post_B3, post_B4 = post[IDX["B2"]], post[IDX["B3"]], post[IDX["B4"]]
@@ -83,7 +100,7 @@ def compute_mask(pre, post, dnbr_umbral, pre_nbr_min, post_nbr_max,
     pre_ndwi   = norm_diff(pre_B3, pre_B8)
 
     snow_or_bright = (ndsi > ndsi_max) | ((brightness > BRILLO_MAX) & (chroma < CROMA_MIN))
-    agua_pre       = pre_ndwi > NDWI_AGUA_MAX
+    agua_pre       = pre_ndwi > ndwi_agua_max
 
     burned_raw = (
         (dnbr > dnbr_umbral) &
@@ -210,14 +227,16 @@ def evaluate_candidates():
 
     # Evaluate each candidate
     print(f"\nEvaluating {len(CANDIDATES)} candidates...\n")
-    header = f"{'dNBR':>6} {'preN':>6} {'postN':>6} | {'FP tiles (want -)':^30} | {'REF tiles (want +)':^34} | {'score':>7}"
+    header = (f"{'dNBR':>6} {'preN':>5} {'postN':>5} {'NDSI':>5} {'NDWI':>5} {'px':>4} | "
+              f"{'FP tiles (want -)':^54} | {'REF tiles (want +)':^42} | {'score':>7}")
     print(header)
     print("-" * len(header))
 
     scored = []
-    for dnbr_u, pre_min, post_max in CANDIDATES:
-        is_baseline = (dnbr_u == 0.22 and pre_min == 0.10 and post_max == 0.40)
-        label_str = f"dNBR{dnbr_u}_preNBR{pre_min}_postNBR{post_max}"
+    for dnbr_u, pre_min, post_max, ndsi_max, ndwi_max, min_px in CANDIDATES:
+        is_baseline = (dnbr_u == 0.30 and pre_min == 0.15 and post_max == 0.40
+                       and ndsi_max == 0.25 and ndwi_max == 0.05 and min_px == 150)
+        label_str = f"dNBR{dnbr_u}_preN{pre_min}_postN{post_max}_NDSI{ndsi_max}_NDWI{ndwi_max}_px{min_px}"
 
         fp_deltas, ref_deltas = [], []
         tile_results = {}
@@ -225,7 +244,8 @@ def evaluate_candidates():
         for t in all_tiles:
             new_mask, *_ = compute_mask(
                 tile_data[t]["pre"], tile_data[t]["post"],
-                dnbr_u, pre_min, post_max
+                dnbr_u, pre_min, post_max,
+                ndsi_max=ndsi_max, ndwi_agua_max=ndwi_max, min_px=min_px
             )
             orig = tile_data[t]["orig"]
             delta = float(new_mask.mean()) - float(orig.mean())
@@ -234,43 +254,40 @@ def evaluate_candidates():
             if t in FP_TILES:
                 fp_deltas.append(delta)
             elif t in CLOUD_TILES:
-                pass  # don't include in score, just display
+                pass
             elif t in REF_TILES:
                 ref_deltas.append(delta)
 
         fp_summary  = "  ".join(f"{d*100:+.1f}%" for d in fp_deltas)
         ref_summary = "  ".join(f"{d*100:+.1f}%" for d in ref_deltas)
 
-        # Score: want FP area to shrink and REF area to be preserved
-        # Penalise FP gain, reward REF gain
+        # Score: penalise FP gain, reward REF gain
         fp_gain  = np.mean(fp_deltas)
         ref_gain = np.mean(ref_deltas)
         score = ref_gain - fp_gain  # higher is better
 
         tag = " ← baseline" if is_baseline else ""
-        print(f"{dnbr_u:>6.2f} {pre_min:>6.2f} {post_max:>6.2f} | {fp_summary:<30} | {ref_summary:<34} | {score*100:>+6.2f}%{tag}")
+        print(f"{dnbr_u:>6.2f} {pre_min:>5.2f} {post_max:>5.2f} {ndsi_max:>5.2f} {ndwi_max:>5.2f} {min_px:>4d} | "
+              f"{fp_summary:<54} | {ref_summary:<42} | {score*100:>+6.2f}%{tag}")
 
-        scored.append((score, dnbr_u, pre_min, post_max, label_str, tile_results))
+        scored.append((score, dnbr_u, pre_min, post_max, ndsi_max, ndwi_max, min_px, label_str, tile_results))
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    best_score, best_dnbr, best_pre, best_post, best_label, best_results = scored[0]
+    best_score, *_, best_label, best_results = scored[0]
 
-    # Save images for the proposed candidate and the baseline
-    proposed = next((s for s in scored if s[1] == 0.30 and s[2] == 0.15 and s[3] == 0.40), None)
-    baseline = next((s for s in scored if s[1] == 0.22 and s[2] == 0.10 and s[3] == 0.40), None)
-    to_save  = {s[4]: s for s in [s for s in scored] if s in [proposed, baseline, scored[0]]}
-    # deduplicated list
+    # Save images for the best candidate and the baseline
+    baseline = next((s for s in scored if s[1] == 0.30 and s[2] == 0.15 and s[5] == 0.05 and s[6] == 150), None)
     save_set = []
     seen = set()
-    for s in [proposed, baseline, scored[0]]:
-        if s is not None and s[4] not in seen:
+    for s in [scored[0], baseline]:
+        if s is not None and s[7] not in seen:
             save_set.append(s)
-            seen.add(s[4])
+            seen.add(s[7])
 
     print(f"\nBest candidate: {best_label}  (score {best_score*100:+.2f}%)")
     print(f"\nSaving comparison images...")
     for s in save_set:
-        _, dnbr_u, pre_min, post_max, label_str, tile_results = s
+        _, dnbr_u, pre_min, post_max, ndsi_max, ndwi_max, min_px, label_str, tile_results = s
         for t in all_tiles:
             orig, new_mask, delta = tile_results[t]
             cloud_note = t in CLOUD_TILES
